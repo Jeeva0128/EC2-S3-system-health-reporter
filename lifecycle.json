@@ -1,0 +1,15 @@
+{
+  "Rules": [
+    {
+      "ID": "HealthReports-30Day-Retention",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "health-reports/"
+      },
+      "Expiration": {
+        "Days": 30
+      }
+    }
+  ]
+}
+
