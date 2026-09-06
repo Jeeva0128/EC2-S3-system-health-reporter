@@ -1,134 +1,235 @@
 # EC2 System Health Reporter → S3 Archive
 
-## Overview
+Automated system health reporting on Amazon EC2 with timestamped reports archived to Amazon S3.
 
-This project automates system health monitoring on an Amazon EC2 instance.
+## Project Overview
 
-A Bash script collects basic system health information, generates a timestamped report, and uploads the report to an Amazon S3 bucket.
+This project uses a Bash script running on an Amazon EC2 instance to collect basic system health information and upload the results to Amazon S3.
 
-The script is scheduled to run automatically every hour using cron.
+The script is executed automatically every hour using cron.
+
+The project demonstrates practical cloud engineering concepts including:
+
+- EC2 compute
+- Linux administration
+- Bash scripting
+- AWS CLI
+- IAM roles
+- S3 object storage
+- Cron automation
+- Security groups
+- S3 lifecycle management
 
 ## Architecture
 
 ```text
-User
- |
- | SSH / EC2 Instance Connect
- v
-Amazon EC2
- |
- | IAM Role
- v
-Amazon S3
- |
- v
-health-reports/
+                    SSH / EC2 Instance Connect
+User  ---------------------------------------------->  EC2
+                                                        |
+                                                        | IAM Role
+                                                        | s3:PutObject
+                                                        v
+                                                   Amazon S3
+                                                        |
+                                                        v
+                                                 health-reports/
 ```
 
-## AWS Resources
+## Workflow
 
-### Amazon EC2
+```text
+Cron
+  |
+  v
+health-report.sh
+  |
+  +--> Disk usage
+  |
+  +--> Memory usage
+  |
+  +--> System uptime
+  |
+  +--> Logged-in users
+  |
+  v
+Timestamped report
+  |
+  v
+AWS CLI
+  |
+  v
+Amazon S3
+```
 
-- Instance name: `EC2-Health-Reporter`
-- Instance type: `t3.micro`
-- Operating system: Amazon Linux 2023
-- Region: Asia Pacific (Hyderabad)
-- Storage: 8 GiB gp3
-- Metadata: IMDSv2 required
+## AWS Infrastructure
 
-### Amazon S3
+### EC2
 
-- Bucket: `jeevanandan-ec2-health-reports-2026`
-- Region: Asia Pacific (Hyderabad)
-- Object prefix: `health-reports/`
-- Object ownership: Bucket owner enforced
-- Block Public Access: Enabled
-- Default encryption: SSE-S3
-- Versioning: Disabled
+| Configuration | Value |
+|---|---|
+| Instance | `EC2-Health-Reporter` |
+| Instance Type | `t3.micro` |
+| OS | Amazon Linux 2023 |
+| Region | Asia Pacific (Hyderabad) |
+| Storage | 8 GiB gp3 |
+| Metadata | IMDSv2 required |
 
-### IAM
+### S3
 
-The EC2 instance uses the IAM role `EC2HealthReporterRole`.
+| Configuration | Value |
+|---|---|
+| Bucket | `jeevanandan-ec2-health-reports-2026` |
+| Region | Asia Pacific (Hyderabad) |
+| Prefix | `health-reports/` |
+| Encryption | SSE-S3 |
+| Object Ownership | Bucket owner enforced |
+| Block Public Access | Enabled |
+| Versioning | Disabled |
 
-The role is restricted to uploading objects to:
+## IAM Security
 
-`health-reports/*`
+The EC2 instance uses the IAM role:
 
-The project does not store AWS access keys inside the script.
+`EC2HealthReporterRole`
 
-### Security Group
+The role follows the principle of least privilege and only allows:
 
-SSH access uses the AWS-managed EC2 Instance Connect prefix list.
+```text
+s3:PutObject
+```
 
-No public HTTP or HTTPS access is required.
+for objects under:
 
-### Lifecycle Policy
+```text
+health-reports/*
+```
 
-Objects under:
+No AWS access keys are stored in the Bash script.
 
-`health-reports/`
+The policy used by the project is available in:
 
-are automatically expired after **30 days**.
+`iam-policy.json`
 
-## How It Works
+## Health Report
 
-1. Cron triggers `health-report.sh` every hour.
-2. The script generates a timestamp using the current system time.
-3. System health information is collected using Linux commands.
-4. A timestamped text report is created.
-5. AWS CLI uploads the report to the S3 `health-reports/` prefix.
-6. The IAM role attached to EC2 authorizes the S3 upload.
-7. S3 lifecycle management automatically expires reports after 30 days.
+Each report contains:
 
-## Health Information Collected
+- Timestamp
+- Root filesystem disk usage
+- Memory usage
+- System uptime
+- Currently logged-in users
 
-The script collects:
+Example report filename:
 
-- Disk usage using `df`
-- Memory usage using `free`
-- System uptime using `uptime`
-- Logged-in users using `who`
+```text
+health-report-YYYY-MM-DD_HH-MM-SS.txt
+```
 
-## Cron Schedule
+## Automation
 
-The script is scheduled using:
+Cron executes the script at the beginning of every hour:
 
 ```text
 0 * * * * /home/ec2-user/health-report.sh
 ```
 
-This runs the health reporter at the beginning of every hour while the EC2 instance is running.
+The job runs only while the EC2 instance is running.
 
-## Technologies Used
+## S3 Lifecycle Management
 
-- AWS EC2
-- Amazon S3
-- AWS IAM
-- AWS CLI
-- Linux
-- Bash
-- Cron
+Health reports are stored under:
 
-## Security & Cost Considerations
+```text
+health-reports/
+```
 
-- The EC2 instance uses an IAM role instead of hardcoded AWS credentials.
-- The IAM role follows least-privilege access by allowing only `s3:PutObject` for the required S3 prefix.
-- S3 Block Public Access is enabled.
-- S3 bucket ACLs are disabled.
-- SSH access is restricted through EC2 Instance Connect.
-- No HTTP or HTTPS inbound access is required.
-- S3 lifecycle management limits report retention to 30 days.
-- The EC2 instance can be stopped when the project is not being demonstrated to reduce compute usage.
+A lifecycle rule automatically expires objects after **30 days**.
+
+The lifecycle configuration is documented in:
+
+`lifecycle.json`
+
+## Network Security
+
+The EC2 security group allows:
+
+- SSH on TCP port 22 through the AWS-managed EC2 Instance Connect prefix list
+
+The security group does not expose:
+
+- HTTP port 80
+- HTTPS port 443
+- SSH to `0.0.0.0/0`
+
+The final configuration is documented in:
+
+`security-group.md`
 
 ## Project Files
 
-- `health-report.sh` — Bash system health collection and S3 upload script
-- `iam-policy.json` — IAM permissions used by the EC2 role
-- `lifecycle.json` — S3 lifecycle configuration
-- `security-group.md` — Security group configuration
+```text
+ec2-system-health-reporter/
+├── README.md
+├── health-report.sh
+├── iam-policy.json
+├── lifecycle.json
+└── security-group.md
+```
 
-## Project Outcome
+### File Descriptions
 
-The project demonstrates a practical AWS automation workflow using EC2, IAM, S3, Bash, AWS CLI, and cron.
+**`health-report.sh`**
 
-It provides automated system health reporting while applying basic cloud security, access control, and storage lifecycle management.
+Collects system information, generates a timestamped report, and uploads it to S3.
+
+**`iam-policy.json`**
+
+Contains the least-privilege S3 upload policy used by the EC2 IAM role.
+
+**`lifecycle.json`**
+
+Documents the 30-day S3 object expiration policy.
+
+**`security-group.md`**
+
+Documents the EC2 network access configuration.
+
+## Technologies
+
+- Amazon EC2
+- Amazon S3
+- AWS IAM
+- AWS CLI
+- Amazon Linux
+- Bash
+- Cron
+
+## Security Practices
+
+This project intentionally avoids hardcoded AWS credentials.
+
+Security controls include:
+
+- IAM role-based authentication
+- Least-privilege S3 permissions
+- S3 Block Public Access
+- S3 default encryption
+- IMDSv2
+- Restricted SSH access
+- No unnecessary inbound ports
+- S3 lifecycle-based retention
+
+## Cost Considerations
+
+The EC2 instance can be stopped when it is not being used for development or demonstration.
+
+Stopping the instance prevents the hourly cron job from executing until the instance is started again.
+
+The S3 lifecycle policy also prevents old health reports from accumulating indefinitely.
+
+## Project Result
+
+The final system provides an automated workflow for collecting EC2 health information and archiving the results in S3.
+
+It combines Linux automation with AWS infrastructure and demonstrates practical use of IAM, EC2, S3, AWS CLI, cron, security groups, and lifecycle policies.
